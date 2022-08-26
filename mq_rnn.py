@@ -1,5 +1,5 @@
 #!/usr/bin/python 3.6
-#-*-coding:utf-8-*-
+# -*-coding:utf-8-*-
 
 '''
 Pytorch Implementation of MQ-RNN
@@ -9,7 +9,7 @@ Author: Jing Wang (jingw2@foxmail.com)
 
 import torch
 from torch import nn
-import torch.nn.functional as F 
+import torch.nn.functional as F
 from torch.optim import Adam
 
 import numpy as np
@@ -26,21 +26,25 @@ import argparse
 from datetime import date
 from progressbar import *
 
+
 class Decoder(nn.Module):
 
     def __init__(
-        self, 
-        input_size, 
-        output_horizon,
-        encoder_hidden_size, 
-        decoder_hidden_size, 
-        output_size):
+            self,
+            input_size,
+            output_horizon,
+            encoder_hidden_size,
+            decoder_hidden_size,
+            output_size):
         super(Decoder, self).__init__()
-        self.global_mlp = nn.Linear(output_horizon * (encoder_hidden_size + input_size), \
-                (output_horizon+1) * decoder_hidden_size)
-        self.local_mlp = nn.Linear(decoder_hidden_size * 2 + input_size, output_size)
+        self.global_mlp = nn.Linear(
+            output_horizon * (encoder_hidden_size + input_size),
+            (output_horizon+1) * decoder_hidden_size
+        )
+        self.local_mlp = nn.Linear(
+            decoder_hidden_size * 2 + input_size, output_size)
         self.decoder_hidden_size = decoder_hidden_size
-    
+
     def forward(self, ht, xf):
         '''
         Args:
@@ -54,7 +58,8 @@ class Decoder(nn.Module):
         # inp = (xf + ht).view(batch_size, -1) # batch_size, hidden_size, output_horizon
         inp = torch.cat([xf, ht], dim=2).view(num_ts, -1)
         contexts = self.global_mlp(inp)
-        contexts = contexts.view(num_ts, output_horizon+1, self.decoder_hidden_size)
+        contexts = contexts.view(
+            num_ts, output_horizon+1, self.decoder_hidden_size)
         ca = contexts[:, -1, :].view(num_ts, -1)
         C = contexts[:, :-1, :]
         C = F.relu(C)
@@ -63,24 +68,24 @@ class Decoder(nn.Module):
             ci = C[:, i, :].view(num_ts, -1)
             xfi = xf[:, i, :].view(num_ts, -1)
             inp = torch.cat([xfi, ci, ca], dim=1)
-            out = self.local_mlp(inp) # num_ts, num_quantiles
+            out = self.local_mlp(inp)  # num_ts, num_quantiles
             y.append(out.unsqueeze(1))
-        y = torch.cat(y, dim=1) # batch_size, output_horizon, quantiles
-        return y 
+        y = torch.cat(y, dim=1)  # batch_size, output_horizon, quantiles
+        return y
 
 
 class MQRNN(nn.Module):
 
     def __init__(
-        self, 
-        output_horizon, 
-        num_quantiles, 
-        input_size, 
+        self,
+        output_horizon,
+        num_quantiles,
+        input_size,
         embedding_size=10,
-        encoder_hidden_size=64, 
+        encoder_hidden_size=64,
         encoder_n_layers=3,
         decoder_hidden_size=64
-        ):
+    ):
         '''
         Args:
         output_horizon (int): output horizons to output in prediction
@@ -94,12 +99,16 @@ class MQRNN(nn.Module):
         super(MQRNN, self).__init__()
         self.output_horizon = output_horizon
         self.encoder_hidden_size = encoder_hidden_size
-        self.input_embed = nn.Linear(1, embedding_size) # time series embedding
-        self.encoder = nn.LSTM(input_size + embedding_size, encoder_hidden_size, \
-                    encoder_n_layers, bias=True, batch_first=True)
-        self.decoder = Decoder(input_size, output_horizon, encoder_hidden_size,\
-                    decoder_hidden_size, num_quantiles)
-    
+        self.input_embed = nn.Linear(
+            1, embedding_size)  # time series embedding
+        self.encoder = nn.LSTM(input_size + embedding_size,
+                               encoder_hidden_size,
+                               encoder_n_layers,
+                               bias=True,
+                               batch_first=True)
+        self.decoder = Decoder(input_size, output_horizon, encoder_hidden_size,
+                               decoder_hidden_size, num_quantiles)
+
     def forward(self, X, y, Xf):
         '''
         Args:
@@ -123,6 +132,7 @@ class MQRNN(nn.Module):
         ypred = self.decoder(ht, Xf)
         return ypred
 
+
 def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
     '''
     Args:
@@ -142,23 +152,24 @@ def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
     yf = y[batch, t:t+seq_len]
     return X_train_batch, y_train_batch, Xf, yf
 
+
 def train(
-    X, 
+    X,
     y,
     args,
     quantiles
-    ):
+):
     num_ts, num_periods, num_features = X.shape
     num_quantiles = len(quantiles)
     model = MQRNN(
-        args.seq_len, 
-        num_quantiles, 
-        num_features, 
+        args.seq_len,
+        num_quantiles,
+        num_features,
         args.embedding_size,
-        args.encoder_hidden_size, 
+        args.encoder_hidden_size,
         args.n_layers,
         args.decoder_hidden_size
-        )
+    )
     optimizer = Adam(model.parameters(), lr=args.lr)
     Xtr, ytr, Xte, yte = util.train_test_split(X, y)
     losses = []
@@ -177,14 +188,14 @@ def train(
     for epoch in progress(range(args.num_epoches)):
         # print("Epoch {} start...".format(epoch))
         for step in range(args.step_per_epoch):
-            X_train_batch, y_train_batch, Xf, yf = batch_generator(Xtr, ytr, 
-                    num_obs_to_train, args.seq_len, args.batch_size)
+            X_train_batch, y_train_batch, Xf, yf = batch_generator(
+                Xtr, ytr, num_obs_to_train, args.seq_len, args.batch_size)
             X_train_tensor = torch.from_numpy(X_train_batch).float()
-            y_train_tensor = torch.from_numpy(y_train_batch).float() 
+            y_train_tensor = torch.from_numpy(y_train_batch).float()
             Xf = torch.from_numpy(Xf).float()
             yf = torch.from_numpy(yf).float()
             ypred = model(X_train_tensor, y_train_tensor, Xf)
-        
+
             # quantile loss
             loss = torch.zeros_like(yf)
             num_ts = Xf.size(0)
@@ -198,21 +209,23 @@ def train(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-    
+
     mape_list = []
-    X_test = Xte[:, -seq_len-num_obs_to_train:-seq_len, :].reshape((num_ts, -1, num_features))
+    X_test = Xte[:, -seq_len-num_obs_to_train:-
+                 seq_len, :].reshape((num_ts, -1, num_features))
     Xf_test = Xte[:, -seq_len:, :].reshape((num_ts, -1, num_features))
     y_test = yte[:, -seq_len-num_obs_to_train:-seq_len].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
     yf_test = yte[:, -seq_len:]
-    ypred = model(X_test, y_test, Xf_test) # (1, num_quantiles, output_horizon)
+    # (1, num_quantiles, output_horizon)
+    ypred = model(X_test, y_test, Xf_test)
     ypred = ypred.data.numpy()
     if yscaler is not None:
         ypred = yscaler.inverse_transform(ypred)
     ypred = np.maximum(0, ypred)
 
-    # P50 quantile MAPE 
+    # P50 quantile MAPE
     mape = util.MAPE(yf_test, ypred[:, :, 1])
     print("MAPE: {}".format(mape))
     mape_list.append(mape)
@@ -220,24 +233,33 @@ def train(
     if args.show_plot:
         show_idx = 0
         plt.figure(1, figsize=(20, 5))
-        plt.plot([k + seq_len + num_obs_to_train - seq_len \
-            for k in range(seq_len)], ypred[show_idx, :, 1], "r-")
-        plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
-            y1=ypred[show_idx, :, 0], y2=ypred[show_idx, :, 2], alpha=0.5)
+        plt.plot([k + seq_len + num_obs_to_train - seq_len
+                  for k in range(seq_len)], ypred[show_idx, :, 1], "r-")
+        plt.fill_between(
+            x=[k + seq_len + num_obs_to_train - seq_len
+               for k in range(seq_len)],
+            y1=ypred[show_idx, :, 0], y2=ypred[show_idx, :, 2], alpha=0.5
+        )
         plt.title('Prediction uncertainty')
         yplot = yte[show_idx, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
-        plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        plt.legend(["P50 forecast", "true", "P10-P90 quantile"],
+                   loc="upper left")
         ymin, ymax = plt.ylim()
-        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax, color="blue", linestyles="dashed", linewidth=2)
+        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax,
+                   color="blue", linestyles="dashed", linewidth=2)
         plt.ylim(ymin, ymax)
         plt.xlabel("Periods")
         plt.ylabel("Y")
         plt.show()
     return losses, mape_list
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--data_path", "-dp", type=str,
+                        default="Merged-update_hourly.csv",
+                        help='Path to the data file')
     parser.add_argument("--num_epoches", "-e", type=int, default=1000)
     parser.add_argument("--step_per_epoch", "-spe", type=int, default=2)
     parser.add_argument("-lr", type=float, default=1e-3)
@@ -255,27 +277,31 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", "-b", type=int, default=64)
     args = parser.parse_args()
 
-    if args.run_test:
-        data_path = util.get_data_path()
-        data = pd.read_csv(os.path.join(data_path, "LD_MT200_hour.csv"), parse_dates=["date"])
-        data["year"] = data["date"].apply(lambda x: x.year)
-        data["day_of_week"] = data["date"].apply(lambda x: x.dayofweek)
-        data = data.loc[(data["date"] >= date(2014, 1, 1)) & (data["date"] <= date(2014, 3, 1))]
-
-        features = ["hour", "day_of_week"]
-        # hours = pd.get_dummies(data["hour"])
-        # dows = pd.get_dummies(data["day_of_week"])
-        hours = data["hour"]
-        dows = data["day_of_week"]
-        X = np.c_[np.asarray(hours), np.asarray(dows)]
-        num_features = X.shape[1]
-        num_periods = len(data)
-        X = np.asarray(X).reshape((-1, num_periods, num_features))
-        y = np.asarray(data["MT_200"]).reshape((-1, num_periods))
-        quantiles = [0.1, 0.5, 0.9]
-        losses, mape_list = train(X, y, args, quantiles)
-        if args.show_plot:
-            plt.plot(range(len(losses)), losses, "k-")
-            plt.xlabel("Period")
-            plt.ylabel("Loss")
-            plt.show()
+    data_path = args.data_path
+    data = pd.read_csv(os.path.join(data_path), index_col=0)
+    data.fillna(0, inplace=True)
+    known_variables = data.loc[
+        :, ['WS_S4', 'GATE_S25A', 'GATE_S25B', 'GATE_S25B2', 'PUMP_S25B',
+            'GATE_S26_1', 'GATE_S26_2', 'PUMP_S26', 'MEAN_RAIN']
+    ]
+    unknown_variables = data.loc[
+        :, ['FLOW_S25A', 'HWS_S25A', 'FLOW_S25B', 'HWS_S25B', 'FLOW_S26',
+            'HWS_S26']
+    ]
+    target_variables = data.loc[
+        :, ['WS_S1', 'TWS_S25A', 'TWS_S25B', 'TWS_S26']
+    ]
+    output_variables = pd.concat([target_variables, unknown_variables], axis=1)
+    X = known_variables.to_numpy()
+    num_features = X.shape[1]
+    num_periods = len(data)
+    X = np.asarray(X).reshape((-1, num_periods, num_features))
+    y = output_variables.to_numpy()
+    y = np.asarray(y).reshape((-1, num_periods))
+    quantiles = [0.1, 0.5, 0.9]
+    losses, mape_list = train(X, y, args, quantiles)
+    if args.show_plot:
+        plt.plot(range(len(losses)), losses, "k-")
+        plt.xlabel("Period")
+        plt.ylabel("Loss")
+        plt.show()

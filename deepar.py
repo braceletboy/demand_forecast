@@ -321,6 +321,9 @@ def train(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--data_path", "-dp", type=str,
+                        default="Merged-update_hourly.csv",
+                        help='Path to the data file')
     parser.add_argument("--num_epoches", "-e", type=int, default=1000)
     parser.add_argument("--step_per_epoch", "-spe", type=int, default=2)
     parser.add_argument("-lr", type=float, default=1e-3)
@@ -333,7 +336,6 @@ if __name__ == "__main__":
     parser.add_argument("--num_results_to_sample",
                         "-nrs", type=int, default=10)
     parser.add_argument("--show_plot", "-sp", action="store_true")
-    parser.add_argument("--run_test", "-rt", action="store_true")
     parser.add_argument("--standard_scaler", "-ss", action="store_true")
     parser.add_argument("--log_scaler", "-ls", action="store_true")
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
@@ -342,30 +344,31 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.run_test:
-        data_path = util.get_data_path()
-        data = pd.read_csv(os.path.join(
-            data_path, "LD_MT200_hour.csv"), parse_dates=["date"])
-        data["year"] = data["date"].apply(lambda x: x.year)
-        data["day_of_week"] = data["date"].apply(lambda x: x.dayofweek)
-        data = data.loc[(data["date"] >= date(2014, 1, 1)) &
-                        (data["date"] <= date(2014, 3, 1))]
+    data_path = args.data_path
+    data = pd.read_csv(os.path.join(data_path), index_col=0)
+    data.fillna(0, inplace=True)
+    known_variables = data.loc[
+        :, ['WS_S4', 'GATE_S25A', 'GATE_S25B', 'GATE_S25B2', 'PUMP_S25B',
+            'GATE_S26_1', 'GATE_S26_2', 'PUMP_S26', 'MEAN_RAIN']
+    ]
+    unknown_variables = data.loc[
+        :, ['FLOW_S25A', 'HWS_S25A', 'FLOW_S25B', 'HWS_S25B', 'FLOW_S26',
+            'HWS_S26']
+    ]
+    target_variables = data.loc[
+        :, ['WS_S1', 'TWS_S25A', 'TWS_S25B', 'TWS_S26']
+    ]
+    output_variables = pd.concat([target_variables, unknown_variables], axis=1)
+    X = known_variables.to_numpy()
+    num_features = X.shape[1]
+    num_periods = len(data)
+    X = np.asarray(X).reshape((-1, num_periods, num_features))
+    y = output_variables.to_numpy()
+    y = np.asarray(y).reshape((-1, num_periods))
 
-        features = ["hour", "day_of_week"]
-        # hours = pd.get_dummies(data["hour"])
-        # dows = pd.get_dummies(data["day_of_week"])
-        hours = data["hour"]
-        dows = data["day_of_week"]
-        X = np.c_[np.asarray(hours), np.asarray(dows)]
-        num_features = X.shape[1]
-        num_periods = len(data)
-        X = np.asarray(X).reshape((-1, num_periods, num_features))
-        y = np.asarray(data["MT_200"]).reshape((-1, num_periods))
-        # X = np.tile(X, (10, 1, 1))
-        # y = np.tile(y, (10, 1))
-        losses, mape_list = train(X, y, args)
-        if args.show_plot:
-            plt.plot(range(len(losses)), losses, "k-")
-            plt.xlabel("Period")
-            plt.ylabel("Loss")
-            plt.show()
+    losses, mape_list = train(X, y, args)
+    if args.show_plot:
+        plt.plot(range(len(losses)), losses, "k-")
+        plt.xlabel("Period")
+        plt.ylabel("Loss")
+        plt.show()
