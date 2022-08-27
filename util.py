@@ -51,13 +51,23 @@ def MAPE(ytrue, ypred):
                           / ytrue))
 
 
-def train_test_split(X, y, train_ratio=0.7):
-    num_ts, num_periods, num_features = X.shape
+def train_test_split(X, y, train_ratio=0.8):
+    '''Split the dataset into train, test sets
+
+    Parameters
+    ----------
+    X
+        The input dataset
+    y
+        The label dataset
+    train_ratio
+        The ratio in which the dataset will be split into train and test
+    '''
+    num_periods, num_features = X.shape
     train_periods = int(num_periods * train_ratio)
-    random.seed(2)
-    Xtr = X[:, :train_periods, :]
+    Xtr = X[:, :train_periods]
     ytr = y[:, :train_periods]
-    Xte = X[:, train_periods:, :]
+    Xte = X[:, train_periods:]
     yte = y[:, train_periods:]
     return Xtr, ytr, Xte, yte
 
@@ -153,24 +163,3 @@ def negative_binomial_loss(ytrue, mu, alpha):
         - 1. / alpha * torch.log(1 + alpha * mu) \
         + ytrue * torch.log(alpha * mu / (1 + alpha * mu))
     return - likelihood.mean()
-
-
-def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
-    '''
-    Args:
-    X (array like): shape (num_samples, num_features, num_periods)
-    y (array like): shape (num_samples, num_periods)
-    num_obs_to_train (int):
-    seq_len (int): sequence/encoder/decoder length
-    batch_size (int)
-    '''
-    num_ts, num_periods, _ = X.shape
-    if num_ts < batch_size:
-        batch_size = num_ts
-    t = random.choice(range(num_obs_to_train, num_periods-seq_len))
-    batch = random.sample(range(num_ts), batch_size)
-    X_train_batch = X[batch, t-num_obs_to_train:t, :]
-    y_train_batch = y[batch, t-num_obs_to_train:t]
-    Xf = X[batch, t:t+seq_len]
-    yf = y[batch, t:t+seq_len]
-    return X_train_batch, y_train_batch, Xf, yf
